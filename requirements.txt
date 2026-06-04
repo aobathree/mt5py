@@ -1,0 +1,10 @@
+# MetaTrader 5 Python integration package (Windows only).
+# https://www.mql5.com/en/docs/python_metatrader5
+MetaTrader5>=5.0.45
+
+# Optional: load non-secret defaults (login number, server) from a .env file.
+# Passwords are NEVER read from here; they are always prompted at runtime.
+python-dotenv>=1.0.0
+
+# Tabular console output for the order listing.
+tabulate>=0.9.0

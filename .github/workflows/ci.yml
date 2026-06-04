@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      # MetaTrader5 は Windows 専用のため CI ではインストールせず、
+      # 構文チェックと静的解析のみ行う（コードは未導入でも import 可能な設計）。
+      - name: Ruff (lint)
+        run: ruff check .
+
+      - name: Byte-compile
+        run: python -m compileall -q list_orders.py mt5_oanda
