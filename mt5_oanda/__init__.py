@@ -16,6 +16,7 @@ from .orders import (
     get_open_positions,
 )
 from .tokyo_fix import FixingDay, collect_fixing_days, detailed_stats, summarize
+from .margin_stress import Scenario, StressReport, run_stress
 
 __all__ = [
     "OANDA_SERVERS",
@@ -33,6 +34,9 @@ __all__ = [
     "collect_fixing_days",
     "detailed_stats",
     "summarize",
+    "Scenario",
+    "StressReport",
+    "run_stress",
 ]
 
 __version__ = "0.1.0"
