@@ -25,11 +25,18 @@ from mt5_oanda import (
     get_open_positions,
     prompt_credentials,
 )
+from mt5_oanda.display import render_table
 
-try:
-    from tabulate import tabulate
-except ImportError:  # tabulate 未導入でも簡易表示で動作させる
-    tabulate = None  # type: ignore[assignment]
+_NUMERIC_COLUMNS = {
+    "ticket",
+    "volume",
+    "price_open",
+    "sl",
+    "tp",
+    "price_current",
+    "profit",
+    "swap",
+}
 
 
 def _render(rows: list[dict[str, object]]) -> str:
@@ -37,12 +44,8 @@ def _render(rows: list[dict[str, object]]) -> str:
         return "  (該当なし)"
     headers = list(rows[0].keys())
     table = [[r[h] for h in headers] for r in rows]
-    if tabulate is not None:
-        return tabulate(table, headers=headers, tablefmt="github")
-    # フォールバック: タブ区切り
-    lines = ["\t".join(headers)]
-    lines += ["\t".join(str(c) for c in row) for row in table]
-    return "\n".join(lines)
+    aligns = ["right" if h in _NUMERIC_COLUMNS else "left" for h in headers]
+    return render_table(headers, table, aligns)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

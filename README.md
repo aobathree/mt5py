@@ -46,6 +46,28 @@ python list_orders.py --orders-only
 python list_orders.py --positions-only
 ```
 
+### 東京仲値(9:55 JST)の値動き検証・記録
+
+仲値前後のドル円の値動き（仲値に向けた上昇・仲値後の反落）を、ヒストリカル M1 データから日次で計測し、**全体 / 五十日(ごとおび) / それ以外**に分けて統計表示します。`--csv` で明細を保存できます。
+
+```powershell
+# 直近90日を分析
+python analyze_tokyo_fix.py
+
+# 期間や計測時刻を指定し、明細を CSV 保存
+python analyze_tokyo_fix.py --days 120 --pre 09:00 --fix 09:55 --post 10:30 --csv nakane.csv
+```
+
+計測内容:
+
+- **run_up**: 仲値前(既定 09:00) → 仲値(09:55) の変化[pips]。プラスが多いほど「仲値に向けて上昇」。
+- **reversal**: 仲値(09:55) → 仲値後(既定 10:30) の変化[pips]。マイナスが多いほど「仲値後に反落」。
+- **五十日(ごとおび)**: 5・10・15・20・25・末日（土日なら直前の平日へ繰上げ）を自動判定。
+
+> 時刻は日本時間(JST)で扱います。ブローカーのサーバー時刻オフセットはライブティックから自動推定します（`--tz-offset-hours` で明示指定も可能）。夏時間切替を跨ぐ期間では 1 時間ずれる可能性があるため、必要に応じてオフセットを指定してください。
+>
+> ⚠️ これは**検証・記録用ツール**であり、将来の値動きや利益を保証するものではありません。
+
 起動すると、登録済み口座の選択 → ログイン番号 → サーバー名 → パスワードの順に入力を求められます。
 
 ```
@@ -91,13 +113,17 @@ KNOWN_ACCOUNTS = {
 
 ```
 mt5py/
-├── list_orders.py          # エントリーポイント（オープン注文一覧）
+├── list_orders.py          # オープン注文/ポジション一覧
+├── analyze_tokyo_fix.py    # 東京仲値(9:55)の値動き検証・記録
 ├── mt5_oanda/
 │   ├── __init__.py
-│   ├── accounts.py         # 非機密の口座プロファイル / サーバー名
+│   ├── accounts.py         # 非機密の口座プロファイル / サーバー名 / 端末パス
 │   ├── credentials.py      # 起動時の認証情報プロンプト（getpass）
 │   ├── connection.py       # MT5 接続/ログイン/切断（context manager）
-│   └── orders.py           # 注文・ポジション取得
+│   ├── orders.py           # 注文・ポジション取得
+│   ├── display.py          # 全角対応のコンソール表整形
+│   ├── market_data.py      # M1取得・JST変換・サーバー時刻オフセット・pip計算
+│   └── tokyo_fix.py        # 仲値ウィンドウ集計・五十日判定・統計
 ├── requirements.txt
 ├── .env.example
 ├── .gitignore
