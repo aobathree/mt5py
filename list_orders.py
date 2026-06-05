@@ -64,6 +64,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="保有ポジション(positions)のみ表示する。",
     )
+    parser.add_argument(
+        "--terminal-path",
+        default=None,
+        help=(
+            "MetaTrader5 端末(terminal64.exe)のパス。"
+            "自動検出に失敗する/IPC timeout になる場合に指定する。"
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -82,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         return 130
 
     try:
-        with MT5Connection(credentials) as conn:
+        with MT5Connection(credentials, terminal_path=args.terminal_path) as conn:
             summary = conn.account_summary()
             print(
                 f"\nログイン成功: login={summary.get('login')} "

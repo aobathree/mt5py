@@ -52,28 +52,40 @@ python list_orders.py --positions-only
 === OANDA (MetaTrader 5) オープン注文一覧 ===
 
 利用可能な口座プロファイル:
-  [1] live1 (server=OANDA-Japan Live) - 本番口座 1
-  [2] live2 (server=OANDA-Japan Live) - 本番口座 2
-  [3] demo1 (server=OANDA-Japan Demo) - デモ口座 1
+  [1] fx (server=OANDA-Japan MT5 Live) - FX 用インスタンス
+  [2] commodity (server=OANDA-Japan MT5 Live) - 商品(Commodity) 用インスタンス
+  [3] index (server=OANDA-Japan MT5 Live) - 指数(Index) 用インスタンス
   [0] 登録リストを使わず手入力する
-口座を番号で選択してください: 3
-ログイン番号(口座番号): 1234567
-サーバーを番号で選択、または名称を入力 [既定: OANDA-Japan Demo]:
+口座を番号で選択してください: 1
+ログイン番号(口座番号): 900175195
+サーバーを番号で選択、または名称を入力 [既定: OANDA-Japan MT5 Live]:
 パスワード(入力は表示されません):
 ```
 
-## 複数口座の登録
+## 複数口座 / 複数インスタンスの登録
 
-`mt5_oanda/accounts.py` の `KNOWN_ACCOUNTS` を編集します。**サーバー名やエイリアスなど非機密情報のみ**を記載してください。
+このプロジェクトは、商品種別ごとに複数の MT5 インスタンスを使う構成を前提にしています。`mt5_oanda/accounts.py` の `KNOWN_ACCOUNTS` を編集してください。**サーバー名・端末パス・エイリアスなど非機密情報のみ**を記載します（ログイン番号/パスワードは書かない）。
 
 ```python
 KNOWN_ACCOUNTS = {
-    "live1": AccountProfile(alias="live1", server="OANDA-Japan Live", note="本番口座 1"),
-    "demo1": AccountProfile(alias="demo1", server="OANDA-Japan Demo", note="デモ口座 1"),
+    "fx": AccountProfile(
+        alias="fx", server="OANDA-Japan Live",
+        terminal_path=r"C:\MT5\OANDA_FX\terminal64.exe", note="FX 用インスタンス",
+    ),
+    "commodity": AccountProfile(
+        alias="commodity", server="OANDA-Japan Live",
+        terminal_path=r"C:\MT5\OANDA_Commodity\terminal64.exe", note="商品用インスタンス",
+    ),
+    "index": AccountProfile(
+        alias="index", server="OANDA-Japan Live",
+        terminal_path=r"C:\MT5\OANDA_Index\terminal64.exe", note="指数用インスタンス",
+    ),
 }
 ```
 
-> サーバー名は、ご利用の MT5 端末のログイン画面に表示される名称に合わせてください（例: `OANDA-Japan Live` / `OANDA-Japan Demo`）。
+> **重要:** MT5 インスタンスが複数ある場合、接続先を一意に決めるため `terminal_path` の指定が必須です。未指定だと Python API がどの端末に繋ぐか定まらず、`IPC timeout` になりがちです。口座を選択すると、そのプロファイルの `terminal_path` が自動的に接続先として使われます。
+>
+> サーバー名は、ご利用の MT5 端末のログイン画面に表示される名称に合わせてください（例: `OANDA-Japan Live`）。
 
 ## プロジェクト構成
 
@@ -92,6 +104,34 @@ mt5py/
 ├── LICENSE
 └── README.md
 ```
+
+## トラブルシューティング
+
+### `MT5 の初期化に失敗しました (code=-10005): IPC timeout`
+
+Python API が MT5 端末(`terminal64.exe`)と通信できないときに発生します。ログイン以前の段階のエラーです。
+
+本ツールは「**起動・ログイン済みの端末にアタッチする**」方式で接続します。複数インスタンス環境では、接続先の指定と起動状態が特に重要です。次を順に確認してください。
+
+1. **接続したい『その』インスタンスを手動で起動する。**
+   - 例: エクスプローラで `C:\MT5\OANDA_FX\terminal64.exe` をダブルクリック。
+   - 別フォルダ/別アプリ版の MT5 を開いても接続先にはなりません（パスが一致した端末のみ）。
+2. その端末で対象口座に**ログイン**し、画面右下の接続状態が**緑(接続済み)**であること。
+3. `ツール > オプション > エキスパートアドバイザ` で **「アルゴリズム取引を許可する」** を有効化。
+4. **同じ口座を別の MT5 で同時に開かない。** 二重ログインはサーバーに切断されます（Journal に `disconnected` と出ます）。接続先以外の MT5（Windows アプリ版など）は閉じてください。
+5. **Python と端末のビット数(64bit)を一致**させる。
+
+パスを明示指定したい場合:
+
+```powershell
+python list_orders.py --terminal-path "C:\MT5\OANDA_FX\terminal64.exe"
+```
+
+### `ログインに失敗しました`
+
+ログイン番号・パスワード・**サーバー名**を確認してください。サーバー名は MT5 端末のログイン画面に表示される正確な名称（OANDA 証券では **`OANDA-Japan MT5 Live`**）に一致している必要があります。異なる場合は `mt5_oanda/accounts.py` の `OANDA_SERVERS` を実際の名称に修正してください。
+
+なお、対象端末が既に目的の口座にログイン済みであれば、本ツールは再ログインを行わずにそのままアタッチします（入力したパスワードは使用されません）。
 
 ## セキュリティに関する注意
 

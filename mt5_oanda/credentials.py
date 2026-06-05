@@ -26,17 +26,23 @@ except Exception:  # python-dotenv 未インストールでも動作する
 
 @dataclass
 class Credentials:
-    """MT5 ログインに必要な認証情報。
+    """MT5 ログインに必要な認証情報 + 接続先インスタンス情報。
 
     パスワードはメモリ上にのみ保持し、ログ出力や repr で露出しないようにする。
+    terminal_path は機密ではないが、選択した口座(インスタンス)と対応するため
+    ここに同梱しておく。
     """
 
     login: int
     password: str
     server: str
+    terminal_path: str | None = None
 
     def __repr__(self) -> str:  # パスワードを伏せる
-        return f"Credentials(login={self.login}, server={self.server!r}, password=***)"
+        return (
+            f"Credentials(login={self.login}, server={self.server!r}, "
+            f"terminal_path={self.terminal_path!r}, password=***)"
+        )
 
 
 def _select_account_profile() -> AccountProfile | None:
@@ -133,9 +139,15 @@ def prompt_credentials() -> Credentials:
 
     default_login = profile.login if profile else None
     default_server = profile.server if profile else None
+    terminal_path = profile.terminal_path if profile else None
 
     login = _prompt_login(default_login)
     server = _prompt_server(default_server)
     password = _prompt_password()
 
-    return Credentials(login=login, password=password, server=server)
+    return Credentials(
+        login=login,
+        password=password,
+        server=server,
+        terminal_path=terminal_path,
+    )
