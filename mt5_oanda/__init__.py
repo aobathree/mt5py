@@ -15,7 +15,7 @@ from .orders import (
     get_open_orders,
     get_open_positions,
 )
-from .tokyo_fix import FixingDay, collect_fixing_days, summarize
+from .tokyo_fix import FixingDay, collect_fixing_days, detailed_stats, summarize
 
 __all__ = [
     "OANDA_SERVERS",
@@ -31,6 +31,7 @@ __all__ = [
     "get_open_positions",
     "FixingDay",
     "collect_fixing_days",
+    "detailed_stats",
     "summarize",
 ]
 

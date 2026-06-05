@@ -25,7 +25,7 @@ import sys
 
 from mt5_oanda import MT5Connection, MT5Error, prompt_credentials
 from mt5_oanda.display import render_table
-from mt5_oanda.tokyo_fix import collect_fixing_days, summarize
+from mt5_oanda.tokyo_fix import collect_fixing_days, detailed_stats, summarize
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -64,13 +64,25 @@ def _fmt_stat(s: dict[str, object]) -> list[object]:
 
 def _print_summary(meta: dict[str, object], summary: dict[str, dict]) -> None:
     print(
-        f"\n対象: {meta['symbol']}  期間: {meta['from']} 〜 {meta['to']}  "
-        f"営業日数: {meta['n_days']}  pip={meta['pip_size']}  "
+        f"\n対象: {meta['symbol']}  指定期間: {meta['from']} 〜 {meta['to']}  "
+        f"集計営業日数: {meta['n_days']}  pip={meta['pip_size']}  "
         f"サーバーUTCオフセット: +{meta['server_offset_hours']}h"
     )
     print(
-        f"計測点(JST): pre={meta['pre']}  fix={meta['fix']}  post={meta['post']}\n"
+        f"計測点(JST): pre={meta['pre']}  fix={meta['fix']}  post={meta['post']}"
     )
+    print(
+        f"取得M1: {meta['n_raw_bars']} 本  "
+        f"実データ範囲(JST): {meta['bars_jst_from'] or '(なし)'}"
+        f" 〜 {meta['bars_jst_to'] or '(なし)'}"
+    )
+    if meta["n_days"] < 20:
+        print(
+            "※ 集計営業日数が少ないため統計は参考程度です。端末で USDJPY の "
+            "M1 チャートを過去方向へ十分スクロールしてヒストリを増やすと、"
+            "より長期間を集計できます。"
+        )
+    print()
 
     headers = ["指標", "区分", "n", "平均pips", "中央値", "標準偏差", "上昇率%"]
     aligns = ["left", "left", "right", "right", "right", "right", "right"]
@@ -85,6 +97,46 @@ def _print_summary(meta: dict[str, object], summary: dict[str, dict]) -> None:
     print(
         "\n* 上昇率% = 変化が +(プラス)だった日の割合。"
         "run_up が高いほど『仲値に向け上昇』、reversal が低いほど『仲値後に反落』の傾向。"
+    )
+
+
+def _fmt_p(p: object) -> str:
+    if p is None or (isinstance(p, float) and p != p):  # None or NaN
+        return "-"
+    return f"{float(p):.3f}"
+
+
+def _fmt_num(x: object, nd: int = 2) -> str:
+    if x is None:
+        return "-"
+    return f"{float(x):.{nd}f}"
+
+
+def _print_significance(detailed: dict) -> None:
+    print("\n=== 有意性検定 (帰無仮説: 平均=0) ===")
+    headers = [
+        "指標", "区分", "n", "平均", "95%信頼区間", "p(t検定)", "符号検定p", "トリム平均", "判定",
+    ]
+    aligns = ["left", "left", "right", "right", "center", "right", "right", "right", "center"]
+    rows = []
+    labels = {"all": "全体", "gotobi": "五十日", "non_gotobi": "非五十日"}
+    for metric, jp in (("run_up", "仲値前→仲値"), ("reversal", "仲値→仲値後")):
+        for subset in ("all", "gotobi", "non_gotobi"):
+            s = detailed[subset][metric]
+            if s["ci_low"] is None:
+                ci = "-"
+            else:
+                ci = f"[{_fmt_num(s['ci_low'],1)}, {_fmt_num(s['ci_high'],1)}]"
+            ps = [p for p in (s["p_t"], s["sign_p"]) if isinstance(p, float) and p == p]
+            verdict = "有意(5%)" if ps and min(ps) < 0.05 else "n.s."
+            rows.append([
+                jp, labels[subset], s["n"], _fmt_num(s["mean"]), ci,
+                _fmt_p(s["p_t"]), _fmt_p(s["sign_p"]), _fmt_num(s["trimmed"]), verdict,
+            ])
+    print(render_table(headers, rows, aligns))
+    print(
+        "\n* p<0.05 で『平均が0と有意に異なる』。"
+        "n.s.=有意差なし。トリム平均=上下10%除外で外れ値の影響を抑えた平均。"
     )
 
 
@@ -181,6 +233,7 @@ def main(argv: list[str] | None = None) -> int:
 
         summary = summarize(records)
         _print_summary(meta, summary)
+        _print_significance(detailed_stats(records))
         _print_recent(records, args.show_rows)
 
         if args.csv:

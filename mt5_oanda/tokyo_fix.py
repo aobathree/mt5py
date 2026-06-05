@@ -18,7 +18,7 @@ from datetime import date, datetime, timedelta
 from .market_data import (
     JST,
     bars_jst_span,
-    fetch_recent_m1_bars_jst,
+    fetch_m1_bars_jst,
     get_server_utc_offset_hours,
     pip_size,
     price_at,
@@ -94,9 +94,7 @@ def collect_fixing_days(
     jst_to = now_jst
     jst_from = now_jst - timedelta(days=days)
 
-    # 直近 days 日分を覆うだけの本数を位置指定で取得(余裕を持たせる)
-    count = max(1440, days * 1440)
-    bars = fetch_recent_m1_bars_jst(symbol, count, server_offset_hours)
+    bars = fetch_m1_bars_jst(symbol, jst_from, jst_to, server_offset_hours)
 
     pre_h, pre_m = _hm(pre)
     fix_h, fix_m = _hm(fix)
@@ -177,17 +175,33 @@ def _summarize(values: list[float]) -> dict[str, object]:
     }
 
 
-def summarize(records: list[FixingDay]) -> dict[str, dict[str, object]]:
-    """run_up / reversal を 全体・五十日・非五十日 に分けて統計する。"""
-    subsets = {
+def _subsets(records: list[FixingDay]) -> dict[str, list[FixingDay]]:
+    return {
         "all": records,
         "gotobi": [r for r in records if r.is_gotobi],
         "non_gotobi": [r for r in records if not r.is_gotobi],
     }
+
+
+def summarize(records: list[FixingDay]) -> dict[str, dict[str, object]]:
+    """run_up / reversal を 全体・五十日・非五十日 に分けて統計する。"""
     result: dict[str, dict[str, object]] = {}
-    for name, rows in subsets.items():
+    for name, rows in _subsets(records).items():
         result[name] = {
             "run_up": _summarize([r.run_up_pips for r in rows]),
             "reversal": _summarize([r.reversal_pips for r in rows]),
+        }
+    return result
+
+
+def detailed_stats(records: list[FixingDay]) -> dict[str, dict[str, dict]]:
+    """有意性検定(t検定/符号検定/信頼区間/トリム平均)を含む詳細統計。"""
+    from .stats import describe
+
+    result: dict[str, dict[str, dict]] = {}
+    for name, rows in _subsets(records).items():
+        result[name] = {
+            "run_up": describe([r.run_up_pips for r in rows]),
+            "reversal": describe([r.reversal_pips for r in rows]),
         }
     return result

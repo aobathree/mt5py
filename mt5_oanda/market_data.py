@@ -88,19 +88,23 @@ def _rates_to_jst_bars(
     return bars
 
 
-def fetch_recent_m1_bars_jst(
+def fetch_m1_bars_jst(
     symbol: str,
-    count: int,
+    jst_from: datetime,
+    jst_to: datetime,
     server_offset_hours: int,
     *,
     retries: int = 8,
     wait_sec: float = 1.5,
 ) -> dict[tuple, dict[str, float]]:
-    """直近 ``count`` 本の M1 バーを取得し、JST キーで辞書化する。
+    """指定 JST 期間の M1 バーを取得し、JST キーで辞書化する。
 
-    端末にヒストリがキャッシュされていない場合、最初の数回は 0 本が返り、
-    呼び出しを契機にバックグラウンドでダウンロードが進む。そのため、
-    短い待機を挟んで複数回リトライする。
+    取得戦略:
+        1. 日付範囲指定(copy_rates_range) を最優先。ヒストリDBから指定期間を
+           丸ごと取得でき、チャートのバー数上限(例: 5万)に縛られにくい。
+        2. それが空なら、位置指定(copy_rates_from_pos)を本数大→小で試す。
+        3. さらに直近時刻起点(copy_rates_from)でダウンロードを促す。
+        ヒストリ未取得時は最初の数回 0 本が返るため、待機しつつリトライする。
 
     Returns:
         {(date, hour, minute): {"open","high","low","close"}, ...}
@@ -109,33 +113,40 @@ def fetch_recent_m1_bars_jst(
     ensure_symbol(symbol)
 
     now_utc = datetime.now(timezone.utc)
-    rates = None
+    # 入力解釈のズレ・DST を吸収するため前後 1 日広げる
+    utc_from = jst_from.astimezone(timezone.utc) - timedelta(days=1)
+    utc_to = jst_to.astimezone(timezone.utc) + timedelta(days=1)
+
+    total_minutes = int((jst_to - jst_from).total_seconds() // 60) + 2 * 1440
+    ladder = [200_000, 100_000, 50_000, 20_000, 10_000, 5_000, 2_000, 1_000]
+    pos_counts = sorted({total_minutes, *[c for c in ladder if c < total_minutes]}, reverse=True)
+
+    best: dict[tuple, dict[str, float]] = {}
     for _ in range(max(1, retries)):
-        # 1) 最新位置から取得
-        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M1, 0, count)
-        if rates is not None and len(rates) > 0:
-            break
-        # 2) 直近時刻起点でも試す(ダウンロードのトリガになりやすい)
-        primer = mt5.copy_rates_from(
-            symbol, mt5.TIMEFRAME_M1, now_utc, min(count, 5000)
-        )
-        if primer is not None and len(primer) > 0:
-            rates = primer
-            break
-        # 3) 日付範囲指定も試す
-        q_from = now_utc - timedelta(minutes=count + 1440)
-        ranged = mt5.copy_rates_range(
-            symbol, mt5.TIMEFRAME_M1, q_from, now_utc + timedelta(days=1)
-        )
+        # 1) 範囲指定(最優先)
+        ranged = mt5.copy_rates_range(symbol, mt5.TIMEFRAME_M1, utc_from, utc_to)
         if ranged is not None and len(ranged) > 0:
-            rates = ranged
-            break
+            bars = _rates_to_jst_bars(ranged, server_offset_hours)
+            if len(bars) > len(best):
+                best = bars
+
+        # 2) 位置指定(本数大→小)。範囲指定より多く取れた場合のみ採用
+        for c in pos_counts:
+            rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M1, 0, c)
+            if rates is not None and len(rates) > 0:
+                bars = _rates_to_jst_bars(rates, server_offset_hours)
+                if len(bars) > len(best):
+                    best = bars
+                break
+
+        if best:
+            return best
+
+        # 3) ダウンロードのトリガ
+        mt5.copy_rates_from(symbol, mt5.TIMEFRAME_M1, now_utc, 5_000)
         time.sleep(wait_sec)
 
-    if rates is None or len(rates) == 0:
-        return {}
-
-    return _rates_to_jst_bars(rates, server_offset_hours)
+    return best
 
 
 def bars_jst_span(bars: dict[tuple, dict[str, float]]) -> tuple[str, str]:
